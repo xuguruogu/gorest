@@ -1,3 +1,1 @@
-## Something To Say
-
 A modified version of [sling](https://github.com/dghubble/sling)
