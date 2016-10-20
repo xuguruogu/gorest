@@ -1,4 +1,4 @@
-package sling
+package gorest
 
 import (
 	"bytes"
@@ -7,6 +7,12 @@ import (
 	"strings"
 
 	goquery "github.com/google/go-querystring/query"
+)
+
+const (
+	contentType     = "Content-Type"
+	jsonContentType = "application/json"
+	formContentType = "application/x-www-form-urlencoded"
 )
 
 // BodyProvider provides Body content for http.Request attachment.

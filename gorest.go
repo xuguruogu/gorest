@@ -1,19 +1,15 @@
-package sling
+package gorest
 
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 
 	goquery "github.com/google/go-querystring/query"
-)
-
-const (
-	contentType     = "Content-Type"
-	jsonContentType = "application/json"
-	formContentType = "application/x-www-form-urlencoded"
 )
 
 // Doer executes http requests.  It is implemented by *http.Client.  You can
@@ -316,68 +312,35 @@ func addHeaders(req *http.Request, header http.Header) {
 	}
 }
 
-// Sending
-
-// ReceiveSuccess creates a new HTTP request and returns the response. Success
-// responses (2XX) are JSON decoded into the value pointed to by successV.
-// Any error creating the request, sending it, or decoding a 2XX response
-// is returned.
-func (s *Sling) ReceiveSuccess(successV interface{}) (*http.Response, error) {
-	return s.Receive(successV, nil)
-}
-
 // Receive creates a new HTTP request and returns the response. Success
 // responses (2XX) are JSON decoded into the value pointed to by successV and
 // other responses are JSON decoded into the value pointed to by failureV.
 // Any error creating the request, sending it, or decoding the response is
 // returned.
 // Receive is shorthand for calling Request and Do.
-func (s *Sling) Receive(successV, failureV interface{}) (*http.Response, error) {
+func (s *Sling) Receive(value interface{}) error {
 	req, err := s.Request()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return s.Do(req, successV, failureV)
-}
-
-// Do sends an HTTP request and returns the response. Success responses (2XX)
-// are JSON decoded into the value pointed to by successV and other responses
-// are JSON decoded into the value pointed to by failureV.
-// Any error sending the request or decoding the response is returned.
-func (s *Sling) Do(req *http.Request, successV, failureV interface{}) (*http.Response, error) {
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return resp, err
+		return err
 	}
-	// when err is nil, resp contains a non-nil resp.Body which must be closed
 	defer resp.Body.Close()
-	if successV != nil || failureV != nil {
-		err = decodeResponseJSON(resp, successV, failureV)
-	}
-	return resp, err
-}
 
-// decodeResponse decodes response Body into the value pointed to by successV
-// if the response is a success (2XX) or into the value pointed to by failureV
-// otherwise. If the successV or failureV argument to decode into is nil,
-// decoding is skipped.
-// Caller is responsible for closing the resp.Body.
-func decodeResponseJSON(resp *http.Response, successV, failureV interface{}) error {
-	if code := resp.StatusCode; 200 <= code && code <= 299 {
-		if successV != nil {
-			return decodeResponseBodyJSON(resp, successV)
-		}
-	} else {
-		if failureV != nil {
-			return decodeResponseBodyJSON(resp, failureV)
-		}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	//code
+	if code := resp.StatusCode; code < 200 || code > 299 {
+		return errors.New(string(body))
+	}
+
+	if value != nil {
+		json.Unmarshal(body, value)
 	}
 	return nil
-}
-
-// decodeResponseBodyJSON JSON decodes a Response Body into the value pointed
-// to by v.
-// Caller must provide a non-nil v and close the resp.Body.
-func decodeResponseBodyJSON(resp *http.Response, v interface{}) error {
-	return json.NewDecoder(resp.Body).Decode(v)
 }
