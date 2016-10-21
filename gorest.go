@@ -19,8 +19,8 @@ type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Sling is an HTTP Request builder and sender.
-type Sling struct {
+// RestClient is an HTTP Request builder and sender.
+type RestClient struct {
 	// http Client for doing requests
 	httpClient Doer
 	// HTTP method (GET, POST, etc.)
@@ -35,9 +35,9 @@ type Sling struct {
 	bodyProvider BodyProvider
 }
 
-// New returns a new Sling with an http DefaultClient.
-func New() *Sling {
-	return &Sling{
+// New returns a new RestClient with an http DefaultClient.
+func New() *RestClient {
+	return &RestClient{
 		httpClient:   http.DefaultClient,
 		method:       "GET",
 		header:       make(http.Header),
@@ -45,8 +45,8 @@ func New() *Sling {
 	}
 }
 
-// New returns a copy of a Sling for creating a new Sling with properties
-// from a parent Sling. For example,
+// New returns a copy of a RestClient for creating a new RestClient with properties
+// from a parent RestClient. For example,
 //
 // 	parentSling := sling.New().Client(client).Base("https://api.io/")
 // 	fooSling := parentSling.New().Get("foo/")
@@ -56,14 +56,14 @@ func New() *Sling {
 // https://api.io/foo/ and https://api.io/bar/ respectively.
 //
 // Note that query and body values are copied so if pointer values are used,
-// mutating the original value will mutate the value within the child Sling.
-func (s *Sling) New() *Sling {
+// mutating the original value will mutate the value within the child RestClient.
+func (s *RestClient) New() *RestClient {
 	// copy Headers pairs into new Header map
 	headerCopy := make(http.Header)
 	for k, v := range s.header {
 		headerCopy[k] = v
 	}
-	return &Sling{
+	return &RestClient{
 		httpClient:   s.httpClient,
 		method:       s.method,
 		rawURL:       s.rawURL,
@@ -77,7 +77,7 @@ func (s *Sling) New() *Sling {
 
 // Client sets the http Client used to do requests. If a nil client is given,
 // the http.DefaultClient will be used.
-func (s *Sling) Client(httpClient *http.Client) *Sling {
+func (s *RestClient) Client(httpClient *http.Client) *RestClient {
 	if httpClient == nil {
 		return s.Doer(http.DefaultClient)
 	}
@@ -86,7 +86,7 @@ func (s *Sling) Client(httpClient *http.Client) *Sling {
 
 // Doer sets the custom Doer implementation used to do requests.
 // If a nil client is given, the http.DefaultClient will be used.
-func (s *Sling) Doer(doer Doer) *Sling {
+func (s *RestClient) Doer(doer Doer) *RestClient {
 	if doer == nil {
 		s.httpClient = http.DefaultClient
 	} else {
@@ -97,38 +97,38 @@ func (s *Sling) Doer(doer Doer) *Sling {
 
 // Method
 
-// Head sets the Sling method to HEAD and sets the given pathURL.
-func (s *Sling) Head(pathURL string) *Sling {
+// Head sets the RestClient method to HEAD and sets the given pathURL.
+func (s *RestClient) Head(pathURL string) *RestClient {
 	s.method = "HEAD"
 	return s.Path(pathURL)
 }
 
-// Get sets the Sling method to GET and sets the given pathURL.
-func (s *Sling) Get(pathURL string) *Sling {
+// Get sets the RestClient method to GET and sets the given pathURL.
+func (s *RestClient) Get(pathURL string) *RestClient {
 	s.method = "GET"
 	return s.Path(pathURL)
 }
 
-// Post sets the Sling method to POST and sets the given pathURL.
-func (s *Sling) Post(pathURL string) *Sling {
+// Post sets the RestClient method to POST and sets the given pathURL.
+func (s *RestClient) Post(pathURL string) *RestClient {
 	s.method = "POST"
 	return s.Path(pathURL)
 }
 
-// Put sets the Sling method to PUT and sets the given pathURL.
-func (s *Sling) Put(pathURL string) *Sling {
+// Put sets the RestClient method to PUT and sets the given pathURL.
+func (s *RestClient) Put(pathURL string) *RestClient {
 	s.method = "PUT"
 	return s.Path(pathURL)
 }
 
-// Patch sets the Sling method to PATCH and sets the given pathURL.
-func (s *Sling) Patch(pathURL string) *Sling {
+// Patch sets the RestClient method to PATCH and sets the given pathURL.
+func (s *RestClient) Patch(pathURL string) *RestClient {
 	s.method = "PATCH"
 	return s.Path(pathURL)
 }
 
-// Delete sets the Sling method to DELETE and sets the given pathURL.
-func (s *Sling) Delete(pathURL string) *Sling {
+// Delete sets the RestClient method to DELETE and sets the given pathURL.
+func (s *RestClient) Delete(pathURL string) *RestClient {
 	s.method = "DELETE"
 	return s.Path(pathURL)
 }
@@ -137,14 +137,14 @@ func (s *Sling) Delete(pathURL string) *Sling {
 
 // Add adds the key, value pair in Headers, appending values for existing keys
 // to the key's values. Header keys are canonicalized.
-func (s *Sling) Add(key, value string) *Sling {
+func (s *RestClient) Add(key, value string) *RestClient {
 	s.header.Add(key, value)
 	return s
 }
 
 // Set sets the key, value pair in Headers, replacing existing values
 // associated with key. Header keys are canonicalized.
-func (s *Sling) Set(key, value string) *Sling {
+func (s *RestClient) Set(key, value string) *RestClient {
 	s.header.Set(key, value)
 	return s
 }
@@ -152,7 +152,7 @@ func (s *Sling) Set(key, value string) *Sling {
 // SetBasicAuth sets the Authorization header to use HTTP Basic Authentication
 // with the provided username and password. With HTTP Basic Authentication
 // the provided username and password are not encrypted.
-func (s *Sling) SetBasicAuth(username, password string) *Sling {
+func (s *RestClient) SetBasicAuth(username, password string) *RestClient {
 	return s.Set("Authorization", "Basic "+basicAuth(username, password))
 }
 
@@ -167,14 +167,14 @@ func basicAuth(username, password string) string {
 
 // Base sets the rawURL. If you intend to extend the url with Path,
 // baseUrl should be specified with a trailing slash.
-func (s *Sling) Base(rawURL string) *Sling {
+func (s *RestClient) Base(rawURL string) *RestClient {
 	s.rawURL = rawURL
 	return s
 }
 
 // Path extends the rawURL with the given path by resolving the reference to
 // an absolute URL. If parsing errors occur, the rawURL is left unmodified.
-func (s *Sling) Path(path string) *Sling {
+func (s *RestClient) Path(path string) *RestClient {
 	baseURL, baseErr := url.Parse(s.rawURL)
 	pathURL, pathErr := url.Parse(path)
 	if baseErr == nil && pathErr == nil {
@@ -184,12 +184,12 @@ func (s *Sling) Path(path string) *Sling {
 	return s
 }
 
-// QueryStruct appends the queryStruct to the Sling's queryStructs. The value
+// QueryStruct appends the queryStruct to the RestClient's queryStructs. The value
 // pointed to by each queryStruct will be encoded as url query parameters on
 // new requests (see Request()).
 // The queryStruct argument should be a pointer to a url tagged struct. See
 // https://godoc.org/github.com/google/go-querystring/query for details.
-func (s *Sling) QueryStruct(queryStruct interface{}) *Sling {
+func (s *RestClient) QueryStruct(queryStruct interface{}) *RestClient {
 	if queryStruct != nil {
 		s.queryStructs = append(s.queryStructs, queryStruct)
 	}
@@ -198,19 +198,19 @@ func (s *Sling) QueryStruct(queryStruct interface{}) *Sling {
 
 // Body
 
-// Body sets the Sling's body. The body value will be set as the Body on new
+// Body sets the RestClient's body. The body value will be set as the Body on new
 // requests (see Request()).
 // If the provided body is also an io.Closer, the request Body will be closed
 // by http.Client methods.
-func (s *Sling) Body(body io.Reader) *Sling {
+func (s *RestClient) Body(body io.Reader) *RestClient {
 	if body == nil {
 		return s
 	}
 	return s.BodyProvider(bodyProvider{body: body})
 }
 
-// BodyProvider sets the Sling's body provider.
-func (s *Sling) BodyProvider(body BodyProvider) *Sling {
+// BodyProvider sets the RestClient's body provider.
+func (s *RestClient) BodyProvider(body BodyProvider) *RestClient {
 	if body == nil {
 		return s
 	}
@@ -224,22 +224,22 @@ func (s *Sling) BodyProvider(body BodyProvider) *Sling {
 	return s
 }
 
-// BodyJSON sets the Sling's bodyJSON. The value pointed to by the bodyJSON
+// BodyJSON sets the RestClient's bodyJSON. The value pointed to by the bodyJSON
 // will be JSON encoded as the Body on new requests (see Request()).
 // The bodyJSON argument should be a pointer to a JSON tagged struct. See
 // https://golang.org/pkg/encoding/json/#MarshalIndent for details.
-func (s *Sling) BodyJSON(bodyJSON interface{}) *Sling {
+func (s *RestClient) BodyJSON(bodyJSON interface{}) *RestClient {
 	if bodyJSON == nil {
 		return s
 	}
 	return s.BodyProvider(jsonBodyProvider{payload: bodyJSON})
 }
 
-// BodyForm sets the Sling's bodyForm. The value pointed to by the bodyForm
+// BodyForm sets the RestClient's bodyForm. The value pointed to by the bodyForm
 // will be url encoded as the Body on new requests (see Request()).
 // The bodyForm argument should be a pointer to a url tagged struct. See
 // https://godoc.org/github.com/google/go-querystring/query for details.
-func (s *Sling) BodyForm(bodyForm interface{}) *Sling {
+func (s *RestClient) BodyForm(bodyForm interface{}) *RestClient {
 	if bodyForm == nil {
 		return s
 	}
@@ -248,10 +248,10 @@ func (s *Sling) BodyForm(bodyForm interface{}) *Sling {
 
 // Requests
 
-// Request returns a new http.Request created with the Sling properties.
+// Request returns a new http.Request created with the RestClient properties.
 // Returns any errors parsing the rawURL, encoding query structs, encoding
 // the body, or creating the http.Request.
-func (s *Sling) Request() (*http.Request, error) {
+func (s *RestClient) Request() (*http.Request, error) {
 	reqURL, err := url.Parse(s.rawURL)
 	if err != nil {
 		return nil, err
@@ -318,7 +318,7 @@ func addHeaders(req *http.Request, header http.Header) {
 // Any error creating the request, sending it, or decoding the response is
 // returned.
 // Receive is shorthand for calling Request and Do.
-func (s *Sling) Receive(value interface{}) error {
+func (s *RestClient) Receive(value interface{}) error {
 	req, err := s.Request()
 	if err != nil {
 		return err
