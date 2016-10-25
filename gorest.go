@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -318,7 +319,7 @@ func addHeaders(req *http.Request, header http.Header) {
 // Any error creating the request, sending it, or decoding the response is
 // returned.
 // Receive is shorthand for calling Request and Do.
-func (s *RestClient) Receive(value interface{}) error {
+func (s *RestClient) Receive(value interface{}, result ...interface{}) error {
 	req, err := s.Request()
 	if err != nil {
 		return err
@@ -336,11 +337,18 @@ func (s *RestClient) Receive(value interface{}) error {
 
 	//code
 	if code := resp.StatusCode; code < 200 || code > 299 {
+		if len(result) != 0 {
+			json.Unmarshal(body, result)
+		}
 		return errors.New(string(body))
 	}
 
 	if value != nil {
-		json.Unmarshal(body, value)
+		err = json.Unmarshal(body, value)
+		if err != nil {
+			return fmt.Errorf("parse message body err: %+v, message: %s", err, string(body))
+		}
 	}
+
 	return nil
 }
