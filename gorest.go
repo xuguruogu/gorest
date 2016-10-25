@@ -319,7 +319,7 @@ func addHeaders(req *http.Request, header http.Header) {
 // Any error creating the request, sending it, or decoding the response is
 // returned.
 // Receive is shorthand for calling Request and Do.
-func (s *RestClient) Receive(value interface{}, result ...interface{}) error {
+func (s *RestClient) Receive(value interface{}, statusCode ...*int) error {
 	req, err := s.Request()
 	if err != nil {
 		return err
@@ -330,6 +330,10 @@ func (s *RestClient) Receive(value interface{}, result ...interface{}) error {
 	}
 	defer resp.Body.Close()
 
+	if len(statusCode) != 0 {
+		*statusCode[0] = resp.StatusCode
+	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err
@@ -337,9 +341,6 @@ func (s *RestClient) Receive(value interface{}, result ...interface{}) error {
 
 	//code
 	if code := resp.StatusCode; code < 200 || code > 299 {
-		if len(result) != 0 {
-			json.Unmarshal(body, result)
-		}
 		return errors.New(string(body))
 	}
 
