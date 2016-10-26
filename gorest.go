@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-
-	goquery "github.com/google/go-querystring/query"
+	"strconv"
+	"strings"
 )
 
 // Doer executes http requests.  It is implemented by *http.Client.  You can
@@ -31,53 +30,49 @@ type RestClient struct {
 	// stores key-values pairs to add to request's Headers
 	header http.Header
 	// url tagged query structs
-	queryStructs []interface{}
-	// body provider
-	bodyProvider BodyProvider
+	data      []interface{}
+	serialize func(params ...interface{}) (string, error)
 }
 
 // New returns a new RestClient with an http DefaultClient.
 func New() *RestClient {
 	return &RestClient{
-		httpClient:   http.DefaultClient,
-		method:       "GET",
-		header:       make(http.Header),
-		queryStructs: make([]interface{}, 0),
+		httpClient: http.DefaultClient,
+		method:     "GET",
+		header:     make(http.Header),
+		data:       make([]interface{}, 0),
+		serialize:  formSting,
 	}
 }
 
-// New returns a copy of a RestClient for creating a new RestClient with properties
-// from a parent RestClient. For example,
-//
-// 	parentSling := sling.New().Client(client).Base("https://api.io/")
-// 	fooSling := parentSling.New().Get("foo/")
-// 	barSling := parentSling.New().Get("bar/")
-//
-// fooSling and barSling will both use the same client, but send requests to
-// https://api.io/foo/ and https://api.io/bar/ respectively.
-//
-// Note that query and body values are copied so if pointer values are used,
-// mutating the original value will mutate the value within the child RestClient.
+// New ...
 func (s *RestClient) New() *RestClient {
-	// copy Headers pairs into new Header map
 	headerCopy := make(http.Header)
 	for k, v := range s.header {
 		headerCopy[k] = v
 	}
 	return &RestClient{
-		httpClient:   s.httpClient,
-		method:       s.method,
-		rawURL:       s.rawURL,
-		header:       headerCopy,
-		queryStructs: append([]interface{}{}, s.queryStructs...),
-		bodyProvider: s.bodyProvider,
+		httpClient: s.httpClient,
+		method:     s.method,
+		rawURL:     s.rawURL,
+		header:     headerCopy,
+		data:       append([]interface{}{}, s.data...),
 	}
 }
 
-// Http Client
+// JSON ...
+func (s *RestClient) JSON() *RestClient {
+	s.serialize = jsonSting
+	return s
+}
 
-// Client sets the http Client used to do requests. If a nil client is given,
-// the http.DefaultClient will be used.
+// FORM ...
+func (s *RestClient) FORM() *RestClient {
+	s.serialize = formSting
+	return s
+}
+
+// Client ...
 func (s *RestClient) Client(httpClient *http.Client) *RestClient {
 	if httpClient == nil {
 		return s.Doer(http.DefaultClient)
@@ -185,126 +180,166 @@ func (s *RestClient) Path(path string) *RestClient {
 	return s
 }
 
-// QueryStruct appends the queryStruct to the RestClient's queryStructs. The value
-// pointed to by each queryStruct will be encoded as url query parameters on
-// new requests (see Request()).
-// The queryStruct argument should be a pointer to a url tagged struct. See
-// https://godoc.org/github.com/google/go-querystring/query for details.
-func (s *RestClient) QueryStruct(queryStruct interface{}) *RestClient {
-	if queryStruct != nil {
-		s.queryStructs = append(s.queryStructs, queryStruct)
+// ParamStruct ...
+func (s *RestClient) ParamStruct(data interface{}) *RestClient {
+	if data != nil {
+		s.data = append(s.data, data)
 	}
 	return s
 }
 
-// Body
-
-// Body sets the RestClient's body. The body value will be set as the Body on new
-// requests (see Request()).
-// If the provided body is also an io.Closer, the request Body will be closed
-// by http.Client methods.
-func (s *RestClient) Body(body io.Reader) *RestClient {
-	if body == nil {
-		return s
-	}
-	return s.BodyProvider(bodyProvider{body: body})
-}
-
-// BodyProvider sets the RestClient's body provider.
-func (s *RestClient) BodyProvider(body BodyProvider) *RestClient {
-	if body == nil {
-		return s
-	}
-	s.bodyProvider = body
-
-	ct := body.ContentType()
-	if ct != "" {
-		s.Set(contentType, ct)
-	}
-
+// Param ...
+func (s *RestClient) Param(key string, value interface{}) *RestClient {
+	s.data = append(s.data, map[string]interface{}{key: value})
 	return s
 }
 
-// BodyJSON sets the RestClient's bodyJSON. The value pointed to by the bodyJSON
-// will be JSON encoded as the Body on new requests (see Request()).
-// The bodyJSON argument should be a pointer to a JSON tagged struct. See
-// https://golang.org/pkg/encoding/json/#MarshalIndent for details.
-func (s *RestClient) BodyJSON(bodyJSON interface{}) *RestClient {
-	if bodyJSON == nil {
-		return s
-	}
-	return s.BodyProvider(jsonBodyProvider{payload: bodyJSON})
-}
-
-// BodyForm sets the RestClient's bodyForm. The value pointed to by the bodyForm
-// will be url encoded as the Body on new requests (see Request()).
-// The bodyForm argument should be a pointer to a url tagged struct. See
-// https://godoc.org/github.com/google/go-querystring/query for details.
-func (s *RestClient) BodyForm(bodyForm interface{}) *RestClient {
-	if bodyForm == nil {
-		return s
-	}
-	return s.BodyProvider(formBodyProvider{payload: bodyForm})
-}
-
-// Requests
-
-// Request returns a new http.Request created with the RestClient properties.
-// Returns any errors parsing the rawURL, encoding query structs, encoding
-// the body, or creating the http.Request.
+// Request ...
 func (s *RestClient) Request() (*http.Request, error) {
 	reqURL, err := url.Parse(s.rawURL)
 	if err != nil {
 		return nil, err
 	}
-
-	err = addQueryStructs(reqURL, s.queryStructs)
-	if err != nil {
-		return nil, err
-	}
-
-	var body io.Reader
-	if s.bodyProvider != nil {
-		body, err = s.bodyProvider.Body()
+	var req *http.Request
+	switch s.method {
+	case "GET":
+		str, err := s.serialize(s.data...)
 		if err != nil {
 			return nil, err
 		}
-	}
-	req, err := http.NewRequest(s.method, reqURL.String(), body)
-	if err != nil {
-		return nil, err
+		reqURL.RawQuery = str
+		req, err = http.NewRequest(s.method, reqURL.String(), nil)
+		if err != nil {
+			return nil, err
+		}
+	case "HEAD", "POST", "PUT", "PATCH", "DELETE":
+		str, err := s.serialize(s.data...)
+		if err != nil {
+			return nil, err
+		}
+		req, err = http.NewRequest(s.method, reqURL.String(), strings.NewReader(str))
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown method: [%s]", s.method)
 	}
 	addHeaders(req, s.header)
-	return req, err
+	return req, nil
 }
 
-// addQueryStructs parses url tagged query structs using go-querystring to
-// encode them to url.Values and format them onto the url.RawQuery. Any
-// query parsing or encoding errors are returned.
-func addQueryStructs(reqURL *url.URL, queryStructs []interface{}) error {
-	urlValues, err := url.ParseQuery(reqURL.RawQuery)
+func formSting(params ...interface{}) (string, error) {
+	values, err := toMap(params...)
 	if err != nil {
-		return err
+		return "", err
 	}
-	// encodes query structs into a url.Values map and merges maps
-	for _, queryStruct := range queryStructs {
-		queryValues, err := goquery.Values(queryStruct)
-		if err != nil {
-			return err
-		}
-		for key, values := range queryValues {
-			for _, value := range values {
-				urlValues.Add(key, value)
-			}
-		}
-	}
-	// url.Values format to a sorted "url encoded" string, e.g. "key=val&foo=bar"
-	reqURL.RawQuery = urlValues.Encode()
-	return nil
+	return changeMapToURLValues(values).Encode(), nil
 }
 
-// addHeaders adds the key, value pairs from the given http.Header to the
-// request. Values for existing keys are appended to the keys values.
+func jsonSting(params ...interface{}) (string, error) {
+	values, err := toMap(params...)
+	if err != nil {
+		return "", err
+	}
+	d, err := json.Marshal(values)
+	if err != nil {
+		return "", err
+	}
+	return string(d), nil
+}
+
+func toMap(params ...interface{}) (map[string]interface{}, error) {
+	jsonValues := map[string]interface{}{}
+	for _, data := range params {
+		content, err := json.Marshal(data)
+		if err != nil {
+			return nil, err
+		}
+
+		var val map[string]interface{}
+		err = json.Unmarshal(content, &val)
+		if err != nil {
+			return nil, err
+		}
+
+		for k, v := range val {
+			jsonValues[k] = v
+		}
+	}
+	return jsonValues, nil
+
+}
+
+func changeMapToURLValues(data map[string]interface{}) url.Values {
+	var newUrlValues = url.Values{}
+	for k, v := range data {
+		switch val := v.(type) {
+		case string:
+			newUrlValues.Add(k, val)
+		case bool:
+			newUrlValues.Add(k, strconv.FormatBool(val))
+		// if a number, change to string
+		// json.Number used to protect against a wrong (for GoRequest) default conversion
+		// which always converts number to float64.
+		// This type is caused by using Decoder.UseNumber()
+		case json.Number:
+			newUrlValues.Add(k, string(val))
+		case int:
+			newUrlValues.Add(k, strconv.FormatInt(int64(val), 10))
+		// TODO add all other int-Types (int8, int16, ...)
+		case float64:
+			newUrlValues.Add(k, strconv.FormatFloat(float64(val), 'f', -1, 64))
+		case float32:
+			newUrlValues.Add(k, strconv.FormatFloat(float64(val), 'f', -1, 64))
+		// following slices are mostly needed for tests
+		case []string:
+			for _, element := range val {
+				newUrlValues.Add(k, element)
+			}
+		case []int:
+			for _, element := range val {
+				newUrlValues.Add(k, strconv.FormatInt(int64(element), 10))
+			}
+		case []bool:
+			for _, element := range val {
+				newUrlValues.Add(k, strconv.FormatBool(element))
+			}
+		case []float64:
+			for _, element := range val {
+				newUrlValues.Add(k, strconv.FormatFloat(float64(element), 'f', -1, 64))
+			}
+		case []float32:
+			for _, element := range val {
+				newUrlValues.Add(k, strconv.FormatFloat(float64(element), 'f', -1, 64))
+			}
+		// these slices are used in practice like sending a struct
+		case []interface{}:
+
+			if len(val) <= 0 {
+				continue
+			}
+
+			switch val[0].(type) {
+			case string:
+				for _, element := range val {
+					newUrlValues.Add(k, element.(string))
+				}
+			case bool:
+				for _, element := range val {
+					newUrlValues.Add(k, strconv.FormatBool(element.(bool)))
+				}
+			case json.Number:
+				for _, element := range val {
+					newUrlValues.Add(k, string(element.(json.Number)))
+				}
+			}
+		default:
+			// TODO add ptr, arrays, ...
+		}
+	}
+	return newUrlValues
+}
+
 func addHeaders(req *http.Request, header http.Header) {
 	for key, values := range header {
 		for _, value := range values {
@@ -340,7 +375,7 @@ func (s *RestClient) Receive(value interface{}, statusCode ...*int) error {
 	}
 
 	//code
-	if code := resp.StatusCode; code < 200 || code > 299 {
+	if code := resp.StatusCode; code != 200 {
 		return errors.New(string(body))
 	}
 
