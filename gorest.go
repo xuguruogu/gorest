@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -388,6 +389,12 @@ func (s *RestClient) Receive(value interface{}, statusCode ...*int) error {
 	}
 
 	if value != nil {
+		v := reflect.ValueOf(value)
+		if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.String {
+			v.Elem().SetString(string(body))
+			return nil
+		}
+
 		err = json.Unmarshal(body, value)
 		if err != nil {
 			return fmt.Errorf("parse message body err: %+v, message: %s", err, string(body))
