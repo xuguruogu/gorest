@@ -12,6 +12,12 @@ import (
 	"strings"
 )
 
+const (
+	contentType     = "Content-Type"
+	jsonContentType = "application/json"
+	formContentType = "application/x-www-form-urlencoded"
+)
+
 // Doer executes http requests.  It is implemented by *http.Client.  You can
 // wrap *http.Client with layers of Doers to form a stack of client-side
 // middleware.
@@ -39,7 +45,7 @@ func New() *RestClient {
 	return &RestClient{
 		httpClient: http.DefaultClient,
 		method:     "GET",
-		header:     make(http.Header),
+		header:     http.Header{contentType: []string{formContentType}},
 		data:       make([]interface{}, 0),
 		serialize:  formSting,
 	}
@@ -63,12 +69,14 @@ func (s *RestClient) New() *RestClient {
 // JSON ...
 func (s *RestClient) JSON() *RestClient {
 	s.serialize = jsonSting
+	s.header.Set(contentType, jsonContentType)
 	return s
 }
 
 // FORM ...
 func (s *RestClient) FORM() *RestClient {
 	s.serialize = formSting
+	s.header.Set(contentType, formContentType)
 	return s
 }
 
