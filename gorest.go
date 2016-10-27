@@ -38,6 +38,8 @@ type RestClient struct {
 	header http.Header
 	// url tagged query structs
 	data []interface{}
+	// debug
+	debug bool
 }
 
 // New returns a new RestClient with an http DefaultClient.
@@ -63,6 +65,12 @@ func (s *RestClient) New() *RestClient {
 		header:     headerCopy,
 		data:       append([]interface{}{}, s.data...),
 	}
+}
+
+//Debug ...
+func (s *RestClient) Debug(debug bool) *RestClient {
+	s.debug = debug
+	return s
 }
 
 // JSON ...
@@ -242,8 +250,11 @@ func (s *RestClient) Request() (req *http.Request, err error) {
 		return nil, fmt.Errorf("unknown method: [%s]", s.method)
 	}
 
-	// fmt.Println(reqURL.String())
-	// fmt.Println(body)
+	if s.debug {
+		fmt.Println("header:", s.header)
+		fmt.Println("request:", reqURL.String())
+		fmt.Println("body:", body)
+	}
 
 	req, err = http.NewRequest(s.method, reqURL.String(), strings.NewReader(body))
 	if err != nil {
