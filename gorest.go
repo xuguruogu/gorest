@@ -266,7 +266,10 @@ func toMap(params ...interface{}) (map[string]interface{}, error) {
 		}
 
 		var val map[string]interface{}
-		err = json.Unmarshal(content, &val)
+		d := json.NewDecoder(strings.NewReader(string(content)))
+		d.UseNumber()
+		err = d.Decode(&val)
+
 		if err != nil {
 			return nil, err
 		}
