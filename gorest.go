@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -37,8 +38,7 @@ type RestClient struct {
 	// stores key-values pairs to add to request's Headers
 	header http.Header
 	// url tagged query structs
-	data      []interface{}
-	serialize func(params ...interface{}) (string, error)
+	data []interface{}
 }
 
 // New returns a new RestClient with an http DefaultClient.
@@ -48,7 +48,6 @@ func New() *RestClient {
 		method:     "GET",
 		header:     http.Header{contentType: []string{formContentType}},
 		data:       make([]interface{}, 0),
-		serialize:  formSting,
 	}
 }
 
@@ -69,14 +68,12 @@ func (s *RestClient) New() *RestClient {
 
 // JSON ...
 func (s *RestClient) JSON() *RestClient {
-	s.serialize = jsonSting
 	s.header.Set(contentType, jsonContentType)
 	return s
 }
 
 // FORM ...
 func (s *RestClient) FORM() *RestClient {
-	s.serialize = formSting
 	s.header.Set(contentType, formContentType)
 	return s
 }
@@ -210,28 +207,50 @@ func (s *RestClient) Request() (*http.Request, error) {
 		return nil, err
 	}
 	var req *http.Request
+	var body io.Reader
+
 	switch s.method {
 	case "GET":
-		str, err := s.serialize(s.data...)
-		if err != nil {
-			return nil, err
-		}
-		reqURL.RawQuery = str
-		req, err = http.NewRequest(s.method, reqURL.String(), nil)
-		if err != nil {
-			return nil, err
+		switch s.header.Get(contentType) {
+		case formContentType:
+			str, err := formSting(s.data...)
+			if err != nil {
+				return nil, err
+			}
+			reqURL.RawQuery = str
+		case jsonContentType:
+			str, err := jsonSting(s.data...)
+			if err != nil {
+				return nil, err
+			}
+			body = strings.NewReader(str)
+		default:
+			return nil, errors.New("unknown content-type")
 		}
 	case "HEAD", "POST", "PUT", "PATCH", "DELETE":
-		str, err := s.serialize(s.data...)
-		if err != nil {
-			return nil, err
+		var str string
+		switch s.header.Get(contentType) {
+		case formContentType:
+			str, err = formSting(s.data...)
+			if err != nil {
+				return nil, err
+			}
+		case jsonContentType:
+			str, err = jsonSting(s.data...)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			return nil, errors.New("unknown content-type")
 		}
-		req, err = http.NewRequest(s.method, reqURL.String(), strings.NewReader(str))
-		if err != nil {
-			return nil, err
-		}
+		body = strings.NewReader(str)
 	default:
 		return nil, fmt.Errorf("unknown method: [%s]", s.method)
+	}
+
+	req, err = http.NewRequest(s.method, reqURL.String(), body)
+	if err != nil {
+		return nil, err
 	}
 	addHeaders(req, s.header)
 	return req, nil
