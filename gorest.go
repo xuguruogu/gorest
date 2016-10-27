@@ -395,7 +395,9 @@ func (s *RestClient) Receive(value interface{}, statusCode ...*int) error {
 			return nil
 		}
 
-		err = json.Unmarshal(body, value)
+		d := json.NewDecoder(strings.NewReader(string(body)))
+		d.UseNumber()
+		err = d.Decode(value)
 		if err != nil {
 			return fmt.Errorf("parse message body err: %+v, message: %s", err, string(body))
 		}
