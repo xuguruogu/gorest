@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -201,54 +200,52 @@ func (s *RestClient) Param(key string, value interface{}) *RestClient {
 }
 
 // Request ...
-func (s *RestClient) Request() (*http.Request, error) {
+func (s *RestClient) Request() (req *http.Request, err error) {
 	reqURL, err := url.Parse(s.rawURL)
 	if err != nil {
 		return nil, err
 	}
-	var req *http.Request
-	var body io.Reader
+	var body string
 
 	switch s.method {
 	case "GET":
 		switch s.header.Get(contentType) {
 		case formContentType:
-			str, err := formSting(s.data...)
+			reqURL.RawQuery, err = formSting(s.data...)
 			if err != nil {
 				return nil, err
 			}
-			reqURL.RawQuery = str
 		case jsonContentType:
-			str, err := jsonSting(s.data...)
+			body, err = jsonSting(s.data...)
 			if err != nil {
 				return nil, err
 			}
-			body = strings.NewReader(str)
 		default:
 			return nil, errors.New("unknown content-type")
 		}
 	case "HEAD", "POST", "PUT", "PATCH", "DELETE":
-		var str string
 		switch s.header.Get(contentType) {
 		case formContentType:
-			str, err = formSting(s.data...)
+			body, err = formSting(s.data...)
 			if err != nil {
 				return nil, err
 			}
 		case jsonContentType:
-			str, err = jsonSting(s.data...)
+			body, err = jsonSting(s.data...)
 			if err != nil {
 				return nil, err
 			}
 		default:
 			return nil, errors.New("unknown content-type")
 		}
-		body = strings.NewReader(str)
 	default:
 		return nil, fmt.Errorf("unknown method: [%s]", s.method)
 	}
 
-	req, err = http.NewRequest(s.method, reqURL.String(), body)
+	// fmt.Println(reqURL.String())
+	// fmt.Println(body)
+
+	req, err = http.NewRequest(s.method, reqURL.String(), strings.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
