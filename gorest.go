@@ -412,7 +412,9 @@ func (s *RestClient) Receive(value interface{}, statusCode ...*int) error {
 	if err != nil {
 		return err
 	}
-	// fmt.Println(string(body), resp.StatusCode)
+	if s.debug {
+		fmt.Println("response:", string(body), "code:", resp.StatusCode)
+	}
 
 	//code
 	if code := resp.StatusCode; code < 200 || code >= 300 {
