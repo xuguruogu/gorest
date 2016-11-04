@@ -216,7 +216,7 @@ func (s *RestClient) Request() (req *http.Request, err error) {
 	var body string
 
 	switch s.method {
-	case "GET":
+	case "GET", "DELETE":
 		switch s.header.Get(contentType) {
 		case formContentType:
 			reqURL.RawQuery, err = formSting(s.data...)
@@ -231,7 +231,7 @@ func (s *RestClient) Request() (req *http.Request, err error) {
 		default:
 			return nil, errors.New("unknown content-type")
 		}
-	case "HEAD", "POST", "PUT", "PATCH", "DELETE":
+	case "HEAD", "POST", "PUT", "PATCH":
 		switch s.header.Get(contentType) {
 		case formContentType:
 			body, err = formSting(s.data...)
